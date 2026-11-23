@@ -1,0 +1,46 @@
+x-app: &app
+  build: .
+  env_file: .env
+  depends_on: [collector]
+
+services:
+  shop:
+    <<: *app
+    environment:
+      OTEL_SERVICE_NAME: shop
+    depends_on: [collector, inventory]
+    ports:
+      - "127.0.0.1:${SHOP_PORT:-8000}:8000"
+  inventory:
+    <<: *app
+    environment:
+      APP_ROLE: inventory
+      OTEL_SERVICE_NAME: inventory
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.133.0
+    volumes:
+      - ./config/collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on: [loki, tempo]
+  loki:
+    image: grafana/loki:3.5.5
+    command: -config.file=/etc/loki/local-config.yaml
+  tempo:
+    image: grafana/tempo:2.8.2
+    command: -config.file=/etc/tempo.yaml
+    volumes:
+      - ./config/tempo.yaml:/etc/tempo.yaml:ro
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    volumes:
+      - ./config/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+  grafana:
+    build: ./config/grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ./config/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/shop.yaml:ro
+      - ./config/grafana/dashboard-provider.yaml:/etc/grafana/provisioning/dashboards/shop.yaml:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on: [loki, tempo, prometheus]

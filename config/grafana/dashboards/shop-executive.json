@@ -1,0 +1,321 @@
+{
+  "uid": "shop-executive",
+  "title": "Corner Shop | Checkout and Baggage",
+  "tags": [
+    "shopping",
+    "opentelemetry"
+  ],
+  "schemaVersion": 41,
+  "version": 5,
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "transaction_status",
+        "label": "Transaction status",
+        "type": "custom",
+        "query": "All : 100, Failed : 400",
+        "current": {
+          "text": "All",
+          "value": "100"
+        },
+        "options": [
+          {
+            "text": "All",
+            "value": "100",
+            "selected": true
+          },
+          {
+            "text": "Failed",
+            "value": "400",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "name": "trace_id",
+        "label": "Trace ID",
+        "type": "query",
+        "query": {
+          "queryType": "infinity",
+          "infinityQuery": {
+            "refId": "variable",
+            "type": "json",
+            "source": "url",
+            "parser": "backend",
+            "format": "table",
+            "url": "http://tempo:3200/api/search?q={%20resource.service.name%20%3D%20%22shop%22%20%26%26%20span.http.route%20%3D%20%22%2Fapi%2Fcheckout%22%20%26%26%20span.http.status_code%20%3E%3D%20${transaction_status:raw}%20}&limit=30&start=${__from:date:seconds}&end=${__to:date:seconds}",
+            "url_options": {
+              "method": "GET"
+            },
+            "root_selector": "traces",
+            "columns": [
+              {
+                "selector": "traceID",
+                "text": "Trace ID",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "datasource": {
+          "type": "yesoreyeram-infinity-datasource",
+          "uid": "checkout-trace-ids"
+        },
+        "refresh": 2,
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Completed checkouts",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 5
+      },
+      "description": "Successful simulated checkouts in the dashboard time range.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({service_name=\"shop\"} |= \"Demo checkout\" [$__range])) or vector(0)",
+          "queryType": "instant",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "\u2014"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Inventory checks",
+      "type": "stat",
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 5
+      },
+      "description": "Inventory requests served in the dashboard time range.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({service_name=\"inventory\"} |= \"Inventory checked\" [$__range])) or vector(0)",
+          "queryType": "instant",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "\u2014"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 3,
+      "title": "Inventory checks with baggage",
+      "type": "stat",
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 5
+      },
+      "description": "Share of inventory checks that received demo.cohort=web or demo.cohort=demo. A dash means there were no inventory checks.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (sum(count_over_time({service_name=\"inventory\"} |= \"Inventory checked\" |~ \"demo_cohort=(web|demo)$\" [$__range])) or vector(0)) / (sum(count_over_time({service_name=\"inventory\"} |= \"Inventory checked\" [$__range])) > 0)",
+          "queryType": "instant",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0,
+          "noValue": "\u2014"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Checkout traces",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Use Transaction status to show all checkout responses or only HTTP 4xx and 5xx failures. Select a Trace ID above to inspect its waterfall and matching logs.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{ resource.service.name = \"shop\" && span.http.route = \"/api/checkout\" && span.http.status_code >= ${transaction_status:raw} }",
+          "limit": 30,
+          "tableType": "traces"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Baggage received downstream",
+      "type": "logs",
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 9
+      },
+      "description": "Inventory logs show the received cohort. None indicates baggage was absent or outside the demo values. The Trace ID field narrows these logs.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "queryType": "range",
+          "expr": "{service_name=\"inventory\"} |= \"Inventory checked\" | trace_id=~\"${trace_id:regex}.*\""
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLogDetails": true,
+        "wrapLogMessage": true
+      }
+    },
+    {
+      "id": 7,
+      "title": "Selected trace service journey",
+      "type": "nodeGraph",
+      "description": "Shows the services and calls for the Trace ID selected above. The waterfall below shows timing and baggage on individual spans.",
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "${trace_id}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Selected trace waterfall",
+      "type": "traces",
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 13
+      },
+      "description": "Choose a Trace ID above. Expand the checkout and inventory spans to inspect their baggage.",
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "${trace_id}"
+        }
+      ]
+    }
+  ]
+}

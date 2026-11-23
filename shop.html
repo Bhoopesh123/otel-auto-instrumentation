@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{% set is_stock = page == "stock" %}
+<title>{{ "Product Stock" if is_stock else "Checkout" }} | Corner Shop</title>
+<style>
+  body { margin: 0; background: #f7f5ef; color: #183528; font: 1rem system-ui; }
+  main { max-width: 58rem; margin: 4rem auto; padding: 0 1.25rem; }
+  nav { display: flex; gap: 1rem; }
+  nav a { color: #23533c; padding-bottom: .25rem; }
+  nav a[aria-current] { font-weight: 700; }
+  h1 { font: 3rem Georgia, serif; }
+  section { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; }
+  article { background: white; border: 1px solid #deded4; padding: 1.25rem; border-radius: .75rem; }
+  button[data-simulate-error] { margin-top: .75rem; background: #92372e; }
+  button { background: #23533c; color: white; border: 0; padding: .65rem 1rem; border-radius: .4rem; cursor: pointer; }
+</style>
+<main>
+  <nav aria-label="Corner Shop">
+    <a href="{{ url_for('home') }}"{% if is_stock %} aria-current="page"{% endif %}>Product Stock</a>
+    <a href="{{ url_for('checkout_page') }}"{% if not is_stock %} aria-current="page"{% endif %}>Checkout</a>
+  </nav>
+  <h1>{{ "Product Stock" if is_stock else "Checkout" }}</h1>
+  <section aria-label="Products">
+  {% for id, product in products.items() %}
+    <article>
+      <h2>{{ product.name }}</h2>
+      <p>${{ '%.2f' | format(product.price_cents / 100) }}</p>
+      <button type="button" data-product="{{ id }}">{{ "Check stock" if is_stock else "Try demo checkout" }}</button>
+    </article>
+  {% endfor %}
+  </section>
+  {% if not is_stock %}
+    <button type="button" data-product="{{ products | first }}" data-simulate-error>Simulate checkout error</button>
+  {% endif %}
+  <p id="result" role="status"></p>
+</main>
+<script>
+  const isStock = {{ is_stock | tojson }};
+  const result = document.querySelector('#result');
+  for (const button of document.querySelectorAll('[data-product]')) {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      result.textContent = 'Checking inventory…';
+      try {
+        const productId = Number(button.dataset.product);
+        const response = isStock
+          ? await fetch(`/api/products/${productId}/stock`, {headers: {baggage: 'demo.cohort=web'}})
+          : await fetch('/api/checkout', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json', baggage: 'demo.cohort=web'},
+              body: JSON.stringify({
+                product_id: productId,
+                quantity: 1,
+                simulate_error: button.hasAttribute('data-simulate-error')
+              })
+            });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+        const outcome = isStock ? `${data.stock} in stock.` : 'Demo checkout complete.';
+        result.textContent = `${outcome} Inventory received shop.endpoint = ${data.inventory_endpoint ?? 'none'}.`;
+      } catch (error) {
+        result.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+</script>
+</html>
